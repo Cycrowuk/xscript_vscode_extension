@@ -1,0 +1,48 @@
+{
+    // .vscode/tasks.json — Optional XScript task overrides
+    //
+    // You do NOT need this file — the XScript extension registers its build
+    // tasks automatically. Press Ctrl+Shift+B and you will see:
+    //
+    //   XScript: Compile Current File    ← default build task
+    //   XScript: Compile All Files
+    //
+    // These tasks use the settings from your VS Code settings.json:
+    //   xscript.compiler.exePath, xscript.compiler.dataFile, etc.
+    //
+    // Only create this file if you need to OVERRIDE the default behaviour,
+    // for example to add extra compiler flags or a different output directory
+    // for a specific workspace.
+    //
+    "version": "2.0.0",
+    "tasks": [
+        {
+            // Task type "xscript" is provided by the XScript extension.
+            // The extension reads your xscript.compiler.* settings automatically.
+            "type":   "xscript",
+            "action": "compile",
+            "label":  "XScript: Compile Current File",
+            "group": {
+                "kind":      "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal":           "always",
+                "panel":            "shared",
+                "showReuseMessage": false,
+                "clear":            true
+            }
+        },
+        {
+            "type":   "xscript",
+            "action": "compileAll",
+            "label":  "XScript: Compile All Files",
+            "group":  "build",
+            "presentation": {
+                "reveal": "always",
+                "panel":  "shared",
+                "clear":  true
+            }
+        }
+    ]
+}

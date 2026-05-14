@@ -1,0 +1,185 @@
+{
+  "name": "xscript-x3fl",
+  "displayName": "XScript — X3 Farnham's Legacy",
+  "description": "IntelliSense, syntax highlighting, and compiler integration for X3 Farnham's Legacy XScript",
+  "version": "1.1.0",
+  "publisher": "x3fl",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages", "Snippets"],
+  "icon": "icons/icon.png",
+  "keywords": ["x3", "xscript", "x3fl", "farnhams legacy", "egosoft"],
+  "repository": { "type": "git", "url": "" },
+  "activationEvents": ["onLanguage:xscript"],
+  "main": "./out/extension.js",
+  "contributes": {
+
+    "languages": [
+      {
+        "id": "xscript",
+        "aliases": ["XScript", "xscript"],
+        "extensions": [".xs", ".xscript"],
+        "configuration": "./language-configuration.json",
+        "icon": { "light": "./icons/xs-light.png", "dark": "./icons/xs-dark.png" }
+      }
+    ],
+
+    "grammars": [
+      {
+        "language": "xscript",
+        "scopeName": "source.xscript",
+        "path": "./syntaxes/xscript.tmLanguage.json"
+      }
+    ],
+
+    "commands": [
+      {
+        "command": "xscript.compile",
+        "title": "XScript: Compile Current File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "xscript.compileAll",
+        "title": "XScript: Compile All Files"
+      },
+      {
+        "command": "xscript.reloadDatabase",
+        "title": "XScript: Reload Definition Database"
+      },
+      {
+        "command": "xscript.showFunctionCount",
+        "title": "XScript: Show Function Statistics"
+      }
+    ],
+
+    "menus": {
+      "editor/title": [
+        {
+          "command": "xscript.compile",
+          "when": "resourceExtname == '.xs' || resourceLangId == 'xscript'",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "xscript.compile",
+          "when": "resourceExtname == '.xs' || resourceLangId == 'xscript'",
+          "group": "xscript"
+        },
+        {
+          "command": "xscript.compileAll",
+          "when": "resourceExtname == '.xs' || resourceLangId == 'xscript'",
+          "group": "xscript"
+        }
+      ]
+    },
+
+    "taskDefinitions": [
+      {
+        "type": "xscript",
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["compile", "compileAll"],
+            "description": "compile = current file, compileAll = all .xs files in workspace"
+          },
+          "file": {
+            "type": "string",
+            "description": "Path to the .xs file to compile (only used when action is 'compile'). Defaults to the active editor file."
+          }
+        }
+      }
+    ],
+
+    "problemMatchers": [
+      {
+        "name": "xscript",
+        "owner": "xscript",
+        "label": "XScript Compiler",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^Compile\\s+(Error|Warning)\\s+\\[#\\d+\\]:\\s*\\[([^\\]]+):(\\d+):(\\d+)\\]\\s*-\\s*(.+)$",
+            "severity": 1,
+            "file":     2,
+            "line":     3,
+            "column":   4,
+            "message":  5
+          },
+          {
+            "regexp": "^\\t.*$"
+          },
+          {
+            "regexp": "^\\t\\s*\\^\\s*$"
+          }
+        ]
+      }
+    ],
+
+    "configuration": {
+      "title": "XScript",
+      "properties": {
+
+        "xscript.dataPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the compiled binary definition file (x3fl.dat or default_data.dat). Takes priority over xmlPath. Leave blank to auto-detect in workspace root."
+        },
+        "xscript.xmlPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to x3fl.xml definition file. Used if no .dat file is found. Leave blank to auto-detect in workspace root."
+        },
+        "xscript.showReturnTypes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show return types in completion item detail lines."
+        },
+
+        "xscript.compiler.exePath": {
+          "type": "string",
+          "default": "",
+          "description": "Full path to XScriptCompiler.exe (e.g. C:\\XScript\\XScriptCompiler.exe)."
+        },
+        "xscript.compiler.dataFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the data file passed via --load_data. Leave blank to auto-detect default_data.dat next to the exe, in the workspace root, or one level above."
+        },
+        "xscript.compiler.outputDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory where compiled .xml files are written (via --out). Leave blank to write alongside the .xs source files."
+        },
+        "xscript.compiler.cwd": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory for the compiler process. Defaults to the workspace root folder."
+        },
+        "xscript.compiler.compileOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically compile the active .xs file whenever it is saved."
+        },
+        "xscript.compiler.errorPattern": {
+          "type": "string",
+          "default": "",
+          "description": "Custom regex with named groups to parse compiler error output. Named groups: file, line, col (optional), severity (optional), message. Leave blank to use built-in patterns."
+        }
+      }
+    }
+  },
+
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch":   "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node":   "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript":    "^5.0.0",
+    "@vscode/vsce":  "^2.0.0"
+  }
+}
