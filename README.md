@@ -4,6 +4,13 @@ Full IntelliSense, syntax highlighting, and diagnostics for XScript — the scri
 
 ---
 
+## What's New in v1.2.0
+
+- **Preprocessor syntax highlighting** — `#ifdef`, `#ifndef`, `#elseif`, `#else`, `#endif`, `#define`, `#undef`, `#include`, `#DESCRIPTION`, `#VERSION`, `#COMMAND` all highlighted correctly
+- **Compile-time defines** — Set `xscript.compiler.defines` to pre-define symbols for `#ifdef` use (e.g. `["DEBUG", "PLATFORM_PC"]`)
+- **#include support** — Include files are resolved relative to the current file
+
+
 ## Features
 
 | Feature | Description |

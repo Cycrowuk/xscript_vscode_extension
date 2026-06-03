@@ -70,7 +70,7 @@ function readHeader(r: BufReader): SectionHeader | null {
 
 // ── Raw data structures ───────────────────────────────────────────────────────
 
-interface RawDataType  { id: number; code: string; name: string; desc: string; isObject: boolean; }
+interface RawDataType  { id: number; code: string; name: string; desc: string; isObject: boolean; prefix: string; }
 interface RawParDef    { id: number; code: string; name: string; desc: string; flags: number; datatypes: number[]; }
 interface RawWare      { id: number; code: string; name: string; desc: string; }
 interface RawRace      { id: number; code: string; name: string; desc: string; }
@@ -108,19 +108,22 @@ function parseGameData(r: BufReader): void {
     void engineMin; void engineMax; void language;
 }
 
-// DATATYPE — DataTypeFileData = 12 bytes
-// id(u32=4) isObject(u8=1) PAD(1) idSize(u16=2) nameSize(u16=2) descSize(u16=2)
+// DATATYPE — DataTypeFileData = 16 bytes
+// id(u32=4) isObject(u8=1) PAD(1) idSize(u16=2) nameSize(u16=2) descSize(u16=2) prefixSize(u16=2) PAD(2)
 function parseOneDataType(r: BufReader): RawDataType {
-    const id       = r.readU32();
-    const isObject = r.readU8() !== 0;
+    const id         = r.readU32();
+    const isObject   = r.readU8() !== 0;
     r.skip(1);          // ← alignment padding after uchar before ushort
-    const idSize   = r.readU16();
-    const nameSize = r.readU16();
-    const descSize = r.readU16();
-    const code = r.readStr(idSize);
-    const name = r.readStr(nameSize);
-    const desc = r.readStr(descSize);
-    return { id, code, name, desc, isObject };
+    const idSize     = r.readU16();
+    const nameSize   = r.readU16();
+    const descSize   = r.readU16();
+    const prefixSize = r.readU16();
+    r.skip(2);          // ← trailing padding to align struct to u32 boundary
+    const code   = r.readStr(idSize);
+    const name   = r.readStr(nameSize);
+    const desc   = r.readStr(descSize);
+    const prefix = r.readStr(prefixSize);
+    return { id, code, name, desc, isObject, prefix };
 }
 
 // PARDEF — ParDefFileData = 16 bytes (all u32/u16, no padding)

@@ -30,6 +30,8 @@ export interface CompilerConfig {
     onSave:       boolean;
     /** Optional custom error-line regex */
     errorPattern: string;
+    /** Pre-defined symbols passed as --define:NAME (for #ifdef use) */
+    defines:      string[];
 }
 
 // Candidate exe names to probe when exePath is not configured
@@ -118,6 +120,7 @@ export function loadCompilerConfig(workspaceRoot: string): CompilerConfig {
         cwd:          cfg.get<string>('cwd')             || workspaceRoot,
         onSave:       cfg.get<boolean>('compileOnSave')  ?? false,
         errorPattern: cfg.get<string>('errorPattern')    ?? '',
+        defines:      cfg.get<string[]>('defines')       ?? [],
     };
 }
 
@@ -140,6 +143,12 @@ function buildArgs(inputFile: string, config: CompilerConfig): string[] {
 
     // --out <output.xml>
     args.push('--out', resolveOutputFile(inputFile, config));
+
+    // --define:NAME  — pre-defined symbols for #ifdef use
+    for (const def of config.defines) {
+        const name = def.trim();
+        if (name) { args.push(`--define:${name}`); }
+    }
 
     return args;
 }
@@ -413,11 +422,15 @@ export class XScriptCompiler {
         }
 
         // Show what we're running
+        const definesSummary = config.defines.length > 0
+            ? config.defines.map(d => `--define:${d}`).join(' ')
+            : '(none)';
         const header = [
             '─'.repeat(72),
             `Compiling: ${path.basename(inputFile)}`,
             `Exe:       ${config.exePath}`,
             `Data:      ${config.dataFile || '(none — --load_data omitted)'}`,
+            `Defines:   ${definesSummary}`,
             `Command:   ${config.exePath} ${args.join(' ')}`,
             `Output:    ${outputXml}`,
             '',

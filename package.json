@@ -1,28 +1,51 @@
 {
   "name": "xscript-x3fl",
-  "displayName": "XScript — X3 Farnham's Legacy",
+  "displayName": "XScript \u2014 X3 Farnham's Legacy",
   "description": "IntelliSense, syntax highlighting, and compiler integration for X3 Farnham's Legacy XScript",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "x3fl",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Programming Languages", "Snippets"],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
   "icon": "icons/icon.png",
-  "keywords": ["x3", "xscript", "x3fl", "farnhams legacy", "egosoft"],
-  "repository": { "type": "git", "url": "" },
-  "activationEvents": ["onLanguage:xscript"],
+  "keywords": [
+    "x3",
+    "xscript",
+    "x3fl",
+    "farnhams legacy",
+    "egosoft"
+  ],
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "activationEvents": [
+    "onLanguage:xscript"
+  ],
   "main": "./out/extension.js",
   "contributes": {
-
     "languages": [
       {
         "id": "xscript",
-        "aliases": ["XScript", "xscript"],
-        "extensions": [".xs", ".xscript"],
+        "aliases": [
+          "XScript",
+          "xscript"
+        ],
+        "extensions": [
+          ".xs",
+          ".xscript"
+        ],
         "configuration": "./language-configuration.json",
-        "icon": { "light": "./icons/xs-light.png", "dark": "./icons/xs-dark.png" }
+        "icon": {
+          "light": "./icons/xs-light.png",
+          "dark": "./icons/xs-dark.png"
+        }
       }
     ],
-
     "grammars": [
       {
         "language": "xscript",
@@ -30,7 +53,6 @@
         "path": "./syntaxes/xscript.tmLanguage.json"
       }
     ],
-
     "commands": [
       {
         "command": "xscript.compile",
@@ -48,9 +70,12 @@
       {
         "command": "xscript.showFunctionCount",
         "title": "XScript: Show Function Statistics"
+      },
+      {
+        "command": "xscript.addDefine",
+        "title": "XScript: Add Compile-time Define"
       }
     ],
-
     "menus": {
       "editor/title": [
         {
@@ -72,15 +97,19 @@
         }
       ]
     },
-
     "taskDefinitions": [
       {
         "type": "xscript",
-        "required": ["action"],
+        "required": [
+          "action"
+        ],
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["compile", "compileAll"],
+            "enum": [
+              "compile",
+              "compileAll"
+            ],
             "description": "compile = current file, compileAll = all .xs files in workspace"
           },
           "file": {
@@ -90,21 +119,23 @@
         }
       }
     ],
-
     "problemMatchers": [
       {
         "name": "xscript",
         "owner": "xscript",
         "label": "XScript Compiler",
-        "fileLocation": ["relative", "${workspaceFolder}"],
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
         "pattern": [
           {
             "regexp": "^Compile\\s+(Error|Warning)\\s+\\[#\\d+\\]:\\s*\\[([^\\]]+):(\\d+):(\\d+)\\]\\s*-\\s*(.+)$",
             "severity": 1,
-            "file":     2,
-            "line":     3,
-            "column":   4,
-            "message":  5
+            "file": 2,
+            "line": 3,
+            "column": 4,
+            "message": 5
           },
           {
             "regexp": "^\\t.*$"
@@ -115,11 +146,9 @@
         ]
       }
     ],
-
     "configuration": {
       "title": "XScript",
       "properties": {
-
         "xscript.dataPath": {
           "type": "string",
           "default": "",
@@ -135,7 +164,6 @@
           "default": true,
           "description": "Show return types in completion item detail lines."
         },
-
         "xscript.compiler.exePath": {
           "type": "string",
           "default": "",
@@ -165,21 +193,28 @@
           "type": "string",
           "default": "",
           "description": "Custom regex with named groups to parse compiler error output. Named groups: file, line, col (optional), severity (optional), message. Leave blank to use built-in patterns."
+        },
+        "xscript.compiler.defines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "List of symbols to pre-define when compiling (equivalent to --define:NAME on the command line). E.g. [\"DEBUG\", \"PLATFORM_PC\"]."
         }
       }
     }
   },
-
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch":   "tsc -watch -p ./",
+    "watch": "tsc -watch -p ./",
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/node":   "^18.0.0",
+    "@types/node": "^18.0.0",
     "@types/vscode": "^1.75.0",
-    "typescript":    "^5.0.0",
-    "@vscode/vsce":  "^2.0.0"
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^2.0.0"
   }
 }
