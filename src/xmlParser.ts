@@ -23,6 +23,10 @@ export interface XFunction {
     example: string;
     /** Which interface this belongs to: 'ship'|'station'|'sector'|'object'|'race'|'global' */
     scope: 'ship' | 'station' | 'sector' | 'object' | 'race' | 'global';
+    /** Namespace this function belongs to (e.g. 'Utils'), or null */
+    namespace: string | null;
+    /** Name to use when called via namespace (e.g. 'random' for Utils::random) */
+    namespaceAlias: string | null;
 }
 
 export interface XProperty {
@@ -58,6 +62,12 @@ export interface XDatabase {
     raceFunctions: XFunction[];
     /** Global functions */
     globalFunctions: XFunction[];
+    /** Namespace → list of functions in that namespace */
+    namespaceFunctions: Map<string, XFunction[]>;
+    /** Namespace → list of constants in that namespace (e.g. RaceFlag → [NPC, Argon, ...]) */
+    constantNamespaces: Map<string, XConstant[]>;
+    /** All known namespace names (functions + constant groups) */
+    namespaces: string[];
 }
 
 // ── Pardef → TypeScript type ──────────────────────────────────────────────────
@@ -212,17 +222,33 @@ export function parseXml(xmlPath: string): XDatabase {
             scope = 'ship'; // will be added to both via byName
         }
 
+        // Namespace attributes
+        const nsMatch      = /namespace="([^"]*)"/.exec(fm[0]);
+        const nsAliasMatch = /namespaceAlias="([^"]*)"/.exec(fm[0]);
+        const namespace      = nsMatch      ? nsMatch[1]      : null;
+        const namespaceAlias = nsAliasMatch ? nsAliasMatch[1] : null;
+
         const fn: XFunction = {
             id: fid, name, description: desc, refTypes,
             returnStyle, returnType,
             returnTs: retTs(returnStyle, returnType),
-            args, example, scope,
+            args, example, scope, namespace, namespaceAlias,
         };
 
         functions.set(fid, fn);
 
         if (!byName.has(name)) { byName.set(name, []); }
         byName.get(name)!.push(fn);
+
+        // Register under namespace alias for namespace completions (e.g. Utils::random)
+        if (namespace) {
+            const nsKey = namespaceAlias ?? name;
+            // Also register alias name in byName for signature help
+            if (namespaceAlias && namespaceAlias !== name) {
+                if (!byName.has(namespaceAlias)) { byName.set(namespaceAlias, []); }
+                byName.get(namespaceAlias)!.push(fn);
+            }
+        }
     }
 
     // ── Parse properties ─────────────────────────────────────────────────────
@@ -249,6 +275,24 @@ export function parseXml(xmlPath: string): XDatabase {
         constants.push({ code: cm[1], description: cm[2], type: cm[3] });
     }
 
+    // ── Parse constant namespaces (ConstantGroup with namespace="true") ────────
+    const constantNamespaces = new Map<string, XConstant[]>();
+    const cgNsRe = /<ConstantGroup\s+code="([^"]+)"[^>]*namespace="true"[^>]*>([\s\S]*?)<\/ConstantGroup>/g;
+    let cgm: RegExpExecArray | null;
+    while ((cgm = cgNsRe.exec(xml)) !== null) {
+        const nsName  = cgm[1];
+        const nsBody  = cgm[2];
+        const members: XConstant[] = [];
+        const memRe = /<Constant[^>]+code="([^"]+)"[^>]+description="([^"]*)"[^>]*>/g;
+        let mm: RegExpExecArray | null;
+        while ((mm = memRe.exec(nsBody)) !== null) {
+            members.push({ code: mm[1], description: mm[2], type: nsName });
+        }
+        if (members.length > 0) {
+            constantNamespaces.set(nsName, members);
+        }
+    }
+
     // ── Build scoped lists ────────────────────────────────────────────────────
 
     const shipFunctions:    XFunction[] = [];
@@ -271,9 +315,34 @@ export function parseXml(xmlPath: string): XDatabase {
         }
     }
 
+    // Build namespace function map
+    const namespaceFunctions = new Map<string, XFunction[]>();
+    for (const fn of functions.values()) {
+        if (fn.namespace) {
+            if (!namespaceFunctions.has(fn.namespace)) {
+                namespaceFunctions.set(fn.namespace, []);
+            }
+            // Use namespaceAlias if set, otherwise the function's own name
+            const nsFn: XFunction = {
+                ...fn,
+                name: fn.namespaceAlias ?? fn.name,
+            };
+            namespaceFunctions.get(fn.namespace)!.push(nsFn);
+        }
+    }
+    const namespaces = Array.from(namespaceFunctions.keys()).sort();
+
+    // Merge all namespace names (function namespaces + constant namespaces)
+    const allNamespaces = Array.from(new Set([
+        ...namespaces,
+        ...Array.from(constantNamespaces.keys()),
+    ])).sort();
+
     return {
         functions, byName, properties, constants,
         shipFunctions, stationFunctions, sectorFunctions,
         objectFunctions, raceFunctions, globalFunctions,
+        namespaceFunctions, constantNamespaces,
+        namespaces: allNamespaces,
     };
 }

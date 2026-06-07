@@ -204,12 +204,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ];
 
     // Completion — trigger on '>' (second char of '->') only.
+    // Trigger on '>' (for ->) and ':' (second colon of ::).
     // Do NOT trigger on '.' — that char appears inside $my.variable names.
     context.subscriptions.push(
         vscode.languages.registerCompletionItemProvider(
             selector,
             new XScriptCompletionProvider(db),
-            '>'
+            '>', ':'
         )
     );
 

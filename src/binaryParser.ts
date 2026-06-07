@@ -53,6 +53,16 @@ class BufReader {
         const end = sl.indexOf(0);
         return sl.slice(0, end < 0 ? len : end).toString('latin1');
     }
+
+    /** Read `count` UTF-16LE wchar_t values → string (no NUL terminator) */
+    readWStr(count: number): string {
+        let s = '';
+        for (let i = 0; i < count; i++) {
+            s += String.fromCharCode(this.buf.readUInt16LE(this.pos));
+            this.pos += 2;
+        }
+        return s;
+    }
 }
 
 // ── Section header (DataFileHeaderRaw) ───────────────────────────────────────
@@ -419,6 +429,8 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
     const rawGFuncs:     RawFunction[]   = [];
     const rawOFuncs:     RawFunction[]   = [];
     const rawProperties: RawProperty[]   = [];
+    const rawGAliases:   { funcId: number; aliasName: string }[] = [];
+    const rawNsFuncs:    { funcId: number; nsName: string; aliName: string }[] = [];
     const rawCustom:     RawCustomData[] = [];
 
     // ── Main section loop — mirrors loadData() outer for(i) / inner for(j) ──
@@ -451,6 +463,24 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
                 case 'OFUNC': {
                     const fn = parseOneFunction(r);
                     rawOFuncs.push(fn);
+                    break;
+                }
+                case 'GALIAS': {
+                    // funcId (u32) + nameSize (u16) + name (wchars)
+                    const funcId   = r.readU32();
+                    const nameSize = r.readU16();
+                    const aliasName = r.readWStr(nameSize);
+                    rawGAliases.push({ funcId, aliasName });
+                    break;
+                }
+                case 'NSFUNC': {
+                    // funcId (u32) + nsSize (u16) + ns + aliSize (u16) + alias
+                    const funcId  = r.readU32();
+                    const nsSize  = r.readU16();
+                    const nsName  = r.readWStr(nsSize);
+                    const aliSize = r.readU16();
+                    const aliName = r.readWStr(aliSize);
+                    rawNsFuncs.push({ funcId, nsName, aliName });
                     break;
                 }
                 case 'SFUNC':       parseOneSFunc(r);      break;
@@ -515,6 +545,7 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
             id: raw.id, name: raw.name, description: raw.desc,
             refTypes: refs, returnStyle: rstyle, returnType: rdtype,
             returnTs: retTs(rstyle, rdtype), args, example: raw.example, scope,
+            namespace: null, namespaceAlias: null,
         };
     }
 
@@ -588,9 +619,42 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
         }
     }
 
+    // Build namespaceFunctions from NSFUNC binary data
+    const namespaceFunctions = new Map<string, XFunction[]>();
+    for (const entry of rawNsFuncs) {
+        const fn = functions.get(entry.funcId);
+        if (fn) {
+            if (!namespaceFunctions.has(entry.nsName)) {
+                namespaceFunctions.set(entry.nsName, []);
+            }
+            const nsFn: XFunction = { ...fn, name: entry.aliName,
+                namespace: entry.nsName, namespaceAlias: entry.aliName };
+            namespaceFunctions.get(entry.nsName)!.push(nsFn);
+        }
+    }
+
+    // Build constantNamespaces from CONSTANTNS binary data
+    const constantNamespaces = new Map<string, XConstant[]>();
+    for (const [ns, entries] of rawConstNS) {
+        const members: XConstant[] = entries.map(e => ({
+            code: e.code,
+            description: e.groupName,
+            type: ns,
+        }));
+        if (members.length > 0) {
+            constantNamespaces.set(ns, members);
+        }
+    }
+
+    const namespaces = Array.from(new Set([
+        ...namespaceFunctions.keys(),
+        ...constantNamespaces.keys(),
+    ])).sort();
+
     return {
         functions, byName, properties, constants,
         shipFunctions, stationFunctions, sectorFunctions,
         objectFunctions, raceFunctions, globalFunctions,
+        namespaceFunctions, constantNamespaces, namespaces,
     };
 }

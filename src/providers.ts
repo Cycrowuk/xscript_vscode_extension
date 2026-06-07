@@ -95,6 +95,23 @@ function linePrefix(document: vscode.TextDocument, position: vscode.Position): s
 }
 
 /**
+ * Returns the namespace name if the cursor is after 'NamespaceName::' ready to
+ * complete a namespace function. e.g. 'Utils::ran|' → returns 'Utils'
+ */
+function detectNamespace(prefix: string): string | null {
+    const m = /\b([A-Za-z_][A-Za-z0-9_]*)::[ \t]*[a-zA-Z_]*$/.exec(prefix);
+    return m ? m[1] : null;
+}
+
+/**
+ * Returns true when the cursor is at a bare identifier position where a
+ * namespace name could be typed — i.e. not after -> or inside a string.
+ */
+function couldBeNamespace(prefix: string): boolean {
+    return /(?:^|[\s=,(+\-*\/])[ \t]*[A-Za-z_][A-Za-z0-9_]*$/.test(prefix);
+}
+
+/**
  * Returns true when the cursor is sitting after '->' ready to complete a
  * method or property name.  Matches:
  *   $ship->|         $ship->get|       $my.ship->get|
@@ -155,7 +172,7 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
         position: vscode.Position,
         _token: vscode.CancellationToken,
         context: vscode.CompletionContext
-    ): vscode.CompletionItem[] {
+    ): vscode.CompletionItem[] | null {
 
         const prefix = linePrefix(document, position);
 
@@ -165,12 +182,23 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
         }
 
         // ── Bare '.' trigger inside a variable name  →  suppress ─────────────
-        // A dot inside $my.variable should never pop up the global function list.
         if (context.triggerCharacter === '.') {
             return [];
         }
 
-        // ── Everything else  →  global functions + constants ─────────────────
+        // ── ':' trigger — only show completions when '::' is fully present.
+        // A single ':' (e.g. a label definition) should not interfere.
+        if (context.triggerCharacter === ':') {
+            const ns = detectNamespace(prefix);
+            if (ns) { return this._namespaceCompletions(ns); }
+            return null; // not a namespace context — let VS Code show default list
+        }
+
+        // ── After Namespace:: (typed manually or via continuation) ────────────
+        const ns = detectNamespace(prefix);
+        if (ns) { return this._namespaceCompletions(ns); }
+
+        // ── Everything else  →  global functions + constants + namespace names ─
         return this._globalCompletions();
     }
 
@@ -238,6 +266,58 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
         return items;
     }
 
+    // ── Namespace function + constant completions (after Namespace::) ─────────
+    private _namespaceCompletions(ns: string): vscode.CompletionItem[] {
+        const items: vscode.CompletionItem[] = [];
+        const seen = new Set<string>();
+
+        // Function members
+        const fns = this.db.namespaceFunctions.get(ns);
+        if (fns) {
+            for (const fn of fns) {
+                const displayName = fn.namespaceAlias ?? fn.name;
+                if (seen.has(displayName)) { continue; }
+                seen.add(displayName);
+
+                const item = new vscode.CompletionItem(displayName, vscode.CompletionItemKind.Function);
+                item.detail = `[${ns}]  → ${fn.returnTs}`;
+                item.documentation = fnDocumentation({ ...fn, name: displayName });
+                item.filterText = displayName;
+                item.sortText   = '0' + displayName.toLowerCase();
+                if (fn.args.length === 0) {
+                    item.insertText = new vscode.SnippetString(`${displayName}()`);
+                } else {
+                    const snippetArgs = fn.args
+                        .map((a, i) => `\${${i + 1}:${a.paramName}}`)
+                        .join(', ');
+                    item.insertText = new vscode.SnippetString(`${displayName}(${snippetArgs})`);
+                }
+                items.push(item);
+            }
+        }
+
+        // Constant members (e.g. RaceFlag::NPC)
+        const consts = this.db.constantNamespaces.get(ns);
+        if (consts) {
+            for (const c of consts) {
+                if (seen.has(c.code)) { continue; }
+                seen.add(c.code);
+
+                const item = new vscode.CompletionItem(c.code, vscode.CompletionItemKind.EnumMember);
+                item.detail = c.type || ns;
+                if (c.description) {
+                    item.documentation = new vscode.MarkdownString(c.description);
+                }
+                item.filterText = c.code;
+                item.sortText   = '0' + c.code.toLowerCase();
+                item.insertText = c.code;
+                items.push(item);
+            }
+        }
+
+        return items;
+    }
+
     // ── Global function + constant completions ────────────────────────────────
     private _globalCompletions(): vscode.CompletionItem[] {
         const items: vscode.CompletionItem[] = [];
@@ -252,6 +332,18 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
             item.filterText  = c.code;
             item.insertText  = c.code;
             item.sortText    = '0' + c.code.toLowerCase();
+            items.push(item);
+        }
+
+        // Namespace names — typing 'Utils' shows it as a module completion
+        for (const ns of this.db.namespaces) {
+            const item = new vscode.CompletionItem(ns, vscode.CompletionItemKind.Module);
+            item.detail = `namespace — use ${ns}:: to access functions`;
+            item.filterText  = ns;
+            item.sortText    = '1' + ns.toLowerCase();
+            // Insert the namespace name with :: so the next trigger fires immediately
+            item.insertText  = new vscode.SnippetString(`${ns}::\${0}`);
+            item.command = { command: 'editor.action.triggerSuggest', title: 'Trigger Suggest' };
             items.push(item);
         }
 
@@ -290,13 +382,24 @@ export class XScriptSignatureHelpProvider implements vscode.SignatureHelpProvide
         }
         if (parenPos < 0) { return null; }
 
-        // Extract function name — handles  funcName(  and  $obj->funcName(
+        // Extract function name — handles  funcName(  $obj->funcName(  and  Ns::funcName(
         const beforeParen = prefix.slice(0, parenPos);
         const nameMatch   = /->([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(beforeParen)
+                         ?? /([a-zA-Z_][a-zA-Z0-9_]*)::([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(beforeParen)
                          ?? /\b([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(beforeParen);
         if (!nameMatch) { return null; }
 
-        const candidates = this.db.byName.get(nameMatch[1]);
+        // For Namespace::func match, look up in namespace map first
+        let candidates = this.db.byName.get(nameMatch[nameMatch.length - 1]);
+        if (!candidates || candidates.length === 0) {
+            // Try namespace map: nameMatch[1]=ns, nameMatch[2]=alias
+            if (nameMatch.length === 3) {
+                const nsFns = this.db.namespaceFunctions.get(nameMatch[1]);
+                if (nsFns) {
+                    candidates = nsFns.filter(f => (f.namespaceAlias ?? f.name) === nameMatch[2]);
+                }
+            }
+        }
         if (!candidates || candidates.length === 0) { return null; }
 
         // Count commas at depth 0 → active parameter index
@@ -337,15 +440,45 @@ export class XScriptHoverProvider implements vscode.HoverProvider {
         document: vscode.TextDocument,
         position: vscode.Position,
     ): vscode.Hover | null {
-        // Word range that includes $ prefix and dot-separated paths
+        // Word range: include $, dot-paths, and Namespace:: prefix
         const range = document.getWordRangeAtPosition(
             position,
-            /\$[a-zA-Z_][a-zA-Z0-9_.]*|[a-zA-Z_][a-zA-Z0-9_]*/
+            /\$[a-zA-Z_][a-zA-Z0-9_.]*|[a-zA-Z_][a-zA-Z0-9_]*::[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*/
         );
         if (!range) { return null; }
 
         const word       = document.getText(range);
         const lookupWord = word.startsWith('$') ? word.slice(1) : word;
+
+        // Namespace::member hover — check function namespaces then constant namespaces
+        const nsParts = /^([A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)$/.exec(lookupWord);
+        if (nsParts) {
+            const [, nsName, memberName] = nsParts;
+            // Function namespace
+            const nsFns = this.db.namespaceFunctions.get(nsName);
+            if (nsFns) {
+                const fn = nsFns.find(f => (f.namespaceAlias ?? f.name) === memberName);
+                if (fn) {
+                    const displayName = `${nsName}::${memberName}`;
+                    const md = new vscode.MarkdownString();
+                    md.isTrusted = true;
+                    md.appendCodeblock(`${displayName}(${fn.args.map(a => `${a.paramName}: ${a.tsType}`).join(', ')}): ${fn.returnTs}`, 'typescript');
+                    md.appendMarkdown('\n\n' + fn.description);
+                    return new vscode.Hover(md, range);
+                }
+            }
+            // Constant namespace
+            const nsConsts = this.db.constantNamespaces.get(nsName);
+            if (nsConsts) {
+                const c = nsConsts.find(x => x.code === memberName);
+                if (c) {
+                    const md = new vscode.MarkdownString();
+                    md.appendMarkdown(`**${nsName}::${memberName}** _(${c.type || nsName})_`);
+                    if (c.description) { md.appendMarkdown(`\n\n${c.description}`); }
+                    return new vscode.Hover(md, range);
+                }
+            }
+        }
 
         // Function?
         const fns = this.db.byName.get(lookupWord);
