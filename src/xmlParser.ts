@@ -44,6 +44,14 @@ export interface XConstant {
     type: string;
 }
 
+export interface XMacro {
+    name: string;
+    /** Positional argument names, e.g. ["value", "array"] for foreach($value, $array) */
+    argNames: string[];
+    /** True if the macro takes a { ... } block, e.g. foreach($v, $a) { ... } */
+    hasBlock: boolean;
+}
+
 export interface XDatabase {
     functions: Map<number, XFunction>;
     /** Lookup by name — multiple overloads possible */
@@ -68,6 +76,8 @@ export interface XDatabase {
     constantNamespaces: Map<string, XConstant[]>;
     /** All known namespace names (functions + constant groups) */
     namespaces: string[];
+    /** Function macros (e.g. foreach) defined in <Macros> */
+    macros: XMacro[];
 }
 
 // ── Pardef → TypeScript type ──────────────────────────────────────────────────
@@ -293,6 +303,29 @@ export function parseXml(xmlPath: string): XDatabase {
         }
     }
 
+    // ── Parse function macros (<Macros><Macro name="foreach">...) ──────────────
+    const macros: XMacro[] = [];
+    const macroRe = /<Macro\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/Macro>/g;
+    let mcm: RegExpExecArray | null;
+    while ((mcm = macroRe.exec(xml)) !== null) {
+        const macroName = mcm[1];
+        const macroBody = mcm[2];
+
+        const argNames: string[] = [];
+        const argsMatch = /<Arguments>([\s\S]*?)<\/Arguments>/.exec(macroBody);
+        if (argsMatch) {
+            const argRe = /<Argument[^>]*\sname="([^"]*)"[^>]*\/?>/g;
+            let am: RegExpExecArray | null;
+            while ((am = argRe.exec(argsMatch[1])) !== null) {
+                argNames.push(am[1]);
+            }
+        }
+
+        const hasBlock = /<BlockCommands\s*\/?>/.test(macroBody);
+
+        macros.push({ name: macroName, argNames, hasBlock });
+    }
+
     // ── Build scoped lists ────────────────────────────────────────────────────
 
     const shipFunctions:    XFunction[] = [];
@@ -344,5 +377,6 @@ export function parseXml(xmlPath: string): XDatabase {
         objectFunctions, raceFunctions, globalFunctions,
         namespaceFunctions, constantNamespaces,
         namespaces: allNamespaces,
+        macros,
     };
 }

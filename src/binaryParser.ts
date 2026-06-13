@@ -431,6 +431,7 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
     const rawProperties: RawProperty[]   = [];
     const rawGAliases:   { funcId: number; aliasName: string }[] = [];
     const rawNsFuncs:    { funcId: number; nsName: string; aliName: string }[] = [];
+    const rawMacros:     { name: string; argNames: string[]; hasBlock: boolean }[] = [];
     const rawCustom:     RawCustomData[] = [];
 
     // ── Main section loop — mirrors loadData() outer for(i) / inner for(j) ──
@@ -481,6 +482,39 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
                     const aliSize = r.readU16();
                     const aliName = r.readWStr(aliSize);
                     rawNsFuncs.push({ funcId, nsName, aliName });
+                    break;
+                }
+                case 'MACRO': {
+                    // nameSize(u16) + name + argCount(u16) + routineCount(u16) + hasBlock(u8)
+                    // + argNames[argCount]: argNameSize(u16) + argName
+                    // + routine[routineCount]: rtype(u8) + textSize(u16) + funcArgCount(u16)
+                    //     + text(textSize) + funcArgs[funcArgCount]: funcId(u32) + argPos(i16)
+                    const nameSize = r.readU16();
+                    const name     = r.readWStr(nameSize);
+                    const argCount     = r.readU16();
+                    const routineCount = r.readU16();
+                    const hasBlock     = r.readU8() !== 0;
+
+                    const argNames: string[] = [];
+                    for (let ai = 0; ai < argCount; ai++) {
+                        const argNameSize = r.readU16();
+                        argNames.push(r.readWStr(argNameSize));
+                    }
+
+                    // Skip over routine lines to keep the stream aligned —
+                    // not needed for autocomplete, but must be consumed.
+                    for (let ri = 0; ri < routineCount; ri++) {
+                        r.readU8();  // rtype
+                        const textSize = r.readU16();
+                        const funcArgCount = r.readU16();
+                        if (textSize > 0) { r.readWStr(textSize); }
+                        for (let fi = 0; fi < funcArgCount; fi++) {
+                            r.readU32(); // funcId
+                            r.readU16(); // argPos (i16, but same byte width)
+                        }
+                    }
+
+                    rawMacros.push({ name, argNames, hasBlock });
                     break;
                 }
                 case 'SFUNC':       parseOneSFunc(r);      break;
@@ -656,5 +690,6 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
         shipFunctions, stationFunctions, sectorFunctions,
         objectFunctions, raceFunctions, globalFunctions,
         namespaceFunctions, constantNamespaces, namespaces,
+        macros: rawMacros,
     };
 }

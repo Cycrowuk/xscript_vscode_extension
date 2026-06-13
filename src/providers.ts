@@ -355,6 +355,38 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
             items.push(makeGlobalFnItem(fn));
         }
 
+        // Function macros (e.g. foreach) — language-level constructs, not real
+        // functions, so they get a Snippet kind and a block body when applicable
+        for (const macro of this.db.macros) {
+            if (seen.has(macro.name)) { continue; }
+            seen.add(macro.name);
+
+            const item = new vscode.CompletionItem(macro.name, vscode.CompletionItemKind.Snippet);
+            item.detail = macro.hasBlock
+                ? `${macro.name}(${macro.argNames.join(', ')}) { ... }`
+                : `${macro.name}(${macro.argNames.join(', ')})`;
+            item.documentation = new vscode.MarkdownString(
+                `Language macro \`${macro.name}\` — expands to native XScript at compile time.`
+            );
+            item.filterText = macro.name;
+            item.sortText   = '0' + macro.name.toLowerCase();
+
+            const argSnippets = macro.argNames
+                .map((a, i) => `\${${i + 1}:${a || `arg${i}`}}`)
+                .join(', ');
+
+            if (macro.hasBlock) {
+                item.insertText = new vscode.SnippetString(
+                    `${macro.name}(${argSnippets})\n{\n\t$0\n}`
+                );
+            } else {
+                item.insertText = new vscode.SnippetString(
+                    `${macro.name}(${argSnippets})$0`
+                );
+            }
+            items.push(item);
+        }
+
         return items;
     }
 }
@@ -389,8 +421,38 @@ export class XScriptSignatureHelpProvider implements vscode.SignatureHelpProvide
                          ?? /\b([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(beforeParen);
         if (!nameMatch) { return null; }
 
+        const lookupName = nameMatch[nameMatch.length - 1];
+
+        // Function macro? (e.g. foreach)
+        const macro = this.db.macros.find(m => m.name === lookupName);
+        if (macro) {
+            const argsText  = prefix.slice(parenPos + 1);
+            let activeParam = 0;
+            let d = 0;
+            for (const ch of argsText) {
+                if (ch === '(' || ch === '[')      { d++; }
+                else if (ch === ')' || ch === ']') { d--; }
+                else if (ch === ',' && d === 0)    { activeParam++; }
+            }
+
+            const help = new vscode.SignatureHelp();
+            help.activeParameter = activeParam;
+            help.activeSignature = 0;
+
+            const sigLabel = macro.hasBlock
+                ? `${macro.name}(${macro.argNames.join(', ')}) { ... }`
+                : `${macro.name}(${macro.argNames.join(', ')})`;
+            const sig = new vscode.SignatureInformation(
+                sigLabel,
+                new vscode.MarkdownString('Language macro — expands to native XScript at compile time.')
+            );
+            sig.parameters = macro.argNames.map(a => new vscode.ParameterInformation(a));
+            help.signatures.push(sig);
+            return help;
+        }
+
         // For Namespace::func match, look up in namespace map first
-        let candidates = this.db.byName.get(nameMatch[nameMatch.length - 1]);
+        let candidates = this.db.byName.get(lookupName);
         if (!candidates || candidates.length === 0) {
             // Try namespace map: nameMatch[1]=ns, nameMatch[2]=alias
             if (nameMatch.length === 3) {
@@ -478,6 +540,25 @@ export class XScriptHoverProvider implements vscode.HoverProvider {
                     return new vscode.Hover(md, range);
                 }
             }
+        }
+
+        // Function macro? (e.g. foreach)
+        const macro = this.db.macros.find(m => m.name === lookupWord);
+        if (macro) {
+            const md = new vscode.MarkdownString();
+            md.isTrusted = true;
+            const sig = macro.hasBlock
+                ? `${macro.name}(${macro.argNames.join(', ')}) { ... }`
+                : `${macro.name}(${macro.argNames.join(', ')})`;
+            md.appendCodeblock(sig, 'typescript');
+            md.appendMarkdown(`\n\nLanguage macro — expands to native XScript at compile time.`);
+            if (macro.argNames.length > 0) {
+                md.appendMarkdown('\n\n**Parameters:**');
+                for (const a of macro.argNames) {
+                    md.appendMarkdown(`\n- \`${a}\``);
+                }
+            }
+            return new vscode.Hover(md, range);
         }
 
         // Function?

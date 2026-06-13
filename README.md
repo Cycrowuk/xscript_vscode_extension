@@ -4,6 +4,14 @@ Full IntelliSense, syntax highlighting, and diagnostics for XScript — the scri
 
 ---
 
+## What's New in v1.3.0
+
+- **Namespace support** — `Utils::random(...)` style calls: autocomplete, hover, and signature help for namespaced functions and constants (e.g. `RaceFlag::NPC`)
+- **Function macros** — `foreach($value, $array) { ... }` and other compiler macros now get autocomplete snippets, hover docs, and signature help
+- **`#datatype` directive highlighting** — `#datatype $var DATATYPE_SHIP|DATATYPE_STATION` now highlighted correctly
+- **Multi-line `#define`** — `#define` directives using trailing `\` continuation are now highlighted across all lines
+- **Function overloads/aliases** — functions with multiple signatures (e.g. `random(max)` / `random(min, max)`) are resolved correctly in autocomplete and signature help
+
 ## What's New in v1.2.0
 
 - **Preprocessor syntax highlighting** — `#ifdef`, `#ifndef`, `#elseif`, `#else`, `#endif`, `#define`, `#undef`, `#include`, `#DESCRIPTION`, `#VERSION`, `#COMMAND` all highlighted correctly

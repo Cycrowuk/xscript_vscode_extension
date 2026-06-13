@@ -256,10 +256,11 @@
           }
         },
         {
-          "comment": "Preprocessor #define with name and value",
+          "comment": "Preprocessor #define with name and value, supports \\ line continuation",
           "name": "meta.preprocessor.define.xscript",
-          "match": "^\\s*(#define)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\(([^)]+)\\))?(.*)$",
-          "captures": {
+          "begin": "^\\s*(#define)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\(([^)]*)\\))?",
+          "end": "(?<!\\\\)$",
+          "beginCaptures": {
             "1": {
               "name": "keyword.control.preprocessor.xscript"
             },
@@ -268,11 +269,28 @@
             },
             "3": {
               "name": "variable.parameter.preprocessor.xscript"
-            },
-            "4": {
-              "name": "string.unquoted.preprocessor.xscript"
             }
-          }
+          },
+          "patterns": [
+            {
+              "comment": "Line continuation backslash",
+              "name": "constant.character.escape.line-continuation.xscript",
+              "match": "\\\\$"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "name": "string.unquoted.preprocessor.xscript",
+              "match": "[^\\\\]+"
+            }
+          ]
         },
         {
           "comment": "Preprocessor #undef",
@@ -297,6 +315,31 @@
             },
             "2": {
               "name": "string.quoted.double.include.xscript"
+            }
+          }
+        },
+        {
+          "comment": "Preprocessor #datatype $var DATATYPE_X|DATATYPE_Y",
+          "name": "meta.preprocessor.datatype.xscript",
+          "match": "^\\s*(#datatype)\\s+(\\$[A-Za-z_][A-Za-z0-9_.]*)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "keyword.control.preprocessor.xscript"
+            },
+            "2": {
+              "name": "variable.other.xscript"
+            },
+            "3": {
+              "patterns": [
+                {
+                  "name": "support.constant.datatype.xscript",
+                  "match": "\\bDATATYPE_[A-Za-z_][A-Za-z0-9_]*\\b"
+                },
+                {
+                  "name": "keyword.operator.xscript",
+                  "match": "\\|"
+                }
+              ]
             }
           }
         },
