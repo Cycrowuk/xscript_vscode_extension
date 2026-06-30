@@ -347,6 +347,11 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
             items.push(item);
         }
 
+        // v0.8 keyword snippets — structural constructs (function, sub, etc.)
+        for (const kw of this._keywordSnippets()) {
+            items.push(kw);
+        }
+
         // Global functions — no artificial cap; VS Code handles virtual scrolling
         const seen = new Set<string>();
         for (const fn of this.db.globalFunctions) {
@@ -388,6 +393,62 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
         }
 
         return items;
+    }
+    // ── v0.8 keyword / structural snippets ───────────────────────────────────
+    private _keywordSnippets(): vscode.CompletionItem[] {
+        const snippets: Array<{
+            label: string;
+            detail: string;
+            doc: string;
+            insert: string;
+        }> = [
+            {
+                label:  'function main',
+                detail: 'function main(...) { } — required script entry point',
+                doc:    'Defines the main function — every v0.8 XScript must have exactly one.',
+                insert: 'function \${1:DATATYPE_NULL} main(\${2:VARSECTOR \\$sector})\n{\n\t$0\n\treturn(null);\n}',
+            },
+            {
+                label:  'function',
+                detail: 'function name(...) { } — local-scoped user function',
+                doc:    'Defines a local-scoped user function. All `$variables` inside are mangled to `$var_fn.name` to avoid collisions. Call it as `$result = name($arg);`.',
+                insert: 'function \${1:DATATYPE_NULL} \${2:name}(\${3})\n{\n\t$0\n}',
+            },
+            {
+                label:  'sub',
+                detail: 'sub name() { } — sub block (shares global scope)',
+                doc:    'Defines a sub block. Variables are shared with the global script scope — no local isolation. Call with `gosub name;`.',
+                insert: 'sub \${1:name}()\n{\n\t$0\n}',
+            },
+            {
+                label:  'if',
+                detail: 'if (...) { }',
+                doc:    'Conditional block.',
+                insert: 'if (\${1:condition})\n{\n\t$0\n}',
+            },
+            {
+                label:  'if else',
+                detail: 'if (...) { } else { }',
+                doc:    'Conditional with else branch.',
+                insert: 'if (\${1:condition})\n{\n\t$2\n}\nelse\n{\n\t$0\n}',
+            },
+            {
+                label:  'while',
+                detail: 'while (...) { }',
+                doc:    'While loop.',
+                insert: 'while (\${1:condition})\n{\n\t$0\n}',
+            },
+        ];
+
+        return snippets.map(s => {
+            const item = new vscode.CompletionItem(s.label, vscode.CompletionItemKind.Snippet);
+            item.detail        = s.detail;
+            item.documentation = new vscode.MarkdownString(s.doc);
+            item.filterText    = s.label;
+            item.sortText      = '00' + s.label;  // float to top above functions
+            item.insertText    = new vscode.SnippetString(s.insert);
+            return item;
+        });
     }
 }
 

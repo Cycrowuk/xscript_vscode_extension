@@ -19,6 +19,12 @@
       "include": "#numbers"
     },
     {
+      "include": "#function-definition"
+    },
+    {
+      "include": "#sub-definition"
+    },
+    {
       "include": "#keywords"
     },
     {
@@ -41,6 +47,23 @@
     }
   ],
   "repository": {
+    "function-definition": {
+      "comment": "v0.8: 'function [ReturnType] name(params)' — highlight keyword, return type, and function name distinctly",
+      "match": "^\\s*(function)(?:\\s+((?:DATATYPE_[A-Z_]+|void)(?:\\|(?:DATATYPE_[A-Z_]+|void))*))?\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.declaration.function.xscript" },
+        "2": { "name": "support.type.xscript" },
+        "3": { "name": "entity.name.function.definition.xscript" }
+      }
+    },
+    "sub-definition": {
+      "comment": "v0.8: 'sub name()' — highlight keyword and sub name",
+      "match": "^\\s*(sub)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.declaration.function.xscript" },
+        "2": { "name": "entity.name.function.definition.xscript" }
+      }
+    },
     "comments": {
       "patterns": [
         {
@@ -104,6 +127,11 @@
     "keywords": {
       "patterns": [
         {
+          "comment": "v0.8 function and sub definition keywords",
+          "name": "keyword.declaration.function.xscript",
+          "match": "\\b(function|sub|endsub|void)\\b"
+        },
+        {
           "name": "keyword.control.xscript",
           "match": "\\b(if|else|while|for|foreach|return|break|continue|abort|end|skip|gosub|goto|wait|interrupt|start|stop|do|inc|dec|dim|global|local)\\b"
         },
@@ -113,7 +141,7 @@
         },
         {
           "name": "keyword.declaration.xscript",
-          "match": "\\b(var|const|function|script|task)\\b"
+          "match": "\\b(var|const|script|task)\\b"
         },
         {
           "name": "support.type.xscript",

@@ -4,6 +4,16 @@ Full IntelliSense, syntax highlighting, and diagnostics for XScript — the scri
 
 ---
 
+## What's New in v1.4.0
+
+Compiler v0.8 language features are now fully supported in the editor:
+
+- **`function main()` wrapper** — `function` and `sub`/`endsub`/`void` are now first-class keywords with dedicated syntax highlighting and snippet completions
+- **Function definition highlighting** — `function DATATYPE_NULL main(VARSECTOR $sector)` highlights the `function` keyword, return type, and function name as distinct tokens
+- **Sub definition highlighting** — `sub myHelper()` highlights `sub` and the sub name separately
+- **New keyword snippets** — `function main`, `function`, `sub`, `if`, `if else`, `while` appear in autocomplete as structural snippet templates
+- **`endsub` keyword** — highlighted as a control keyword; `endsub;` inside a sub block is recognised as an early-exit statement
+
 ## What's New in v1.3.0
 
 - **Namespace support** — `Utils::random(...)` style calls: autocomplete, hover, and signature help for namespaced functions and constants (e.g. `RaceFlag::NPC`)
