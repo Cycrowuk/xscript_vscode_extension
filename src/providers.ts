@@ -198,6 +198,13 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
         const ns = detectNamespace(prefix);
         if (ns) { return this._namespaceCompletions(ns); }
 
+        // ── Inside a string argument of a scriptCheck function  →  script names ─
+        // Detect pattern like:  call("  or  $obj->call("
+        const scriptNameCtx = this._detectScriptNameContext(prefix);
+        if (scriptNameCtx) {
+            return this._scriptNameCompletions();
+        }
+
         // ── Everything else  →  global functions + constants + namespace names ─
         return this._globalCompletions();
     }
@@ -319,6 +326,66 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
     }
 
     // ── Global function + constant completions ────────────────────────────────
+    // ── Detect if cursor is inside the scriptCheck string arg of a function ───
+    // Returns true when the prefix looks like:  call("...   or  $obj->call("...
+    private _detectScriptNameContext(prefix: string): boolean {
+        // Find the innermost unclosed '('
+        let depth = 0;
+        let parenPos = -1;
+        for (let i = prefix.length - 1; i >= 0; i--) {
+            if (prefix[i] === ')')      { depth++; }
+            else if (prefix[i] === '(') {
+                if (depth === 0) { parenPos = i; break; }
+                depth--;
+            }
+        }
+        if (parenPos < 0) { return false; }
+
+        // Count commas at depth 0 between '(' and cursor → which arg we're on
+        const afterParen = prefix.slice(parenPos + 1);
+        let argIdx = 0, d = 0;
+        for (const ch of afterParen) {
+            if (ch === '(' || ch === '[')      { d++; }
+            else if (ch === ')' || ch === ']') { d--; }
+            else if (ch === ',' && d === 0)    { argIdx++; }
+        }
+
+        // Get function name before '('
+        const beforeParen = prefix.slice(0, parenPos);
+        const nameMatch = /->([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(beforeParen)
+                       ?? /\b([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(beforeParen);
+        if (!nameMatch) { return false; }
+        const fnName = nameMatch[nameMatch.length - 1];
+
+        // Check if that function has a scriptCheck arg at this position
+        const candidates = this.db.byName.get(fnName);
+        if (!candidates) { return false; }
+        for (const fn of candidates) {
+            if (argIdx < fn.args.length && (fn.args[argIdx] as any).scriptCheck) {
+                // Cursor must be inside a string — after an opening quote
+                if (/["'][^"']*$/.test(afterParen)) { return true; }
+            }
+        }
+        return false;
+    }
+
+    private _scriptNameCompletions(): vscode.CompletionItem[] {
+        const items: vscode.CompletionItem[] = [];
+        for (const [name, def] of this.db.scripts) {
+            const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Module);
+            item.detail = `Script: ${name}`;
+            if (def.args.length > 0) {
+                const params = def.args.map((a, i) => a.name || `arg${i + 1}`).join(', ');
+                item.documentation = new vscode.MarkdownString(
+                    `**${name}**\n\nParameters: \`${params}\``
+                );
+            }
+            item.sortText = '0' + name; // float above other completions
+            items.push(item);
+        }
+        return items;
+    }
+
     private _globalCompletions(): vscode.CompletionItem[] {
         const items: vscode.CompletionItem[] = [];
 
@@ -345,11 +412,6 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
             item.insertText  = new vscode.SnippetString(`${ns}::\${0}`);
             item.command = { command: 'editor.action.triggerSuggest', title: 'Trigger Suggest' };
             items.push(item);
-        }
-
-        // v0.8 keyword snippets — structural constructs (function, sub, etc.)
-        for (const kw of this._keywordSnippets()) {
-            items.push(kw);
         }
 
         // Global functions — no artificial cap; VS Code handles virtual scrolling
@@ -393,62 +455,6 @@ export class XScriptCompletionProvider implements vscode.CompletionItemProvider 
         }
 
         return items;
-    }
-    // ── v0.8 keyword / structural snippets ───────────────────────────────────
-    private _keywordSnippets(): vscode.CompletionItem[] {
-        const snippets: Array<{
-            label: string;
-            detail: string;
-            doc: string;
-            insert: string;
-        }> = [
-            {
-                label:  'function main',
-                detail: 'function main(...) { } — required script entry point',
-                doc:    'Defines the main function — every v0.8 XScript must have exactly one.',
-                insert: 'function \${1:DATATYPE_NULL} main(\${2:VARSECTOR \\$sector})\n{\n\t$0\n\treturn(null);\n}',
-            },
-            {
-                label:  'function',
-                detail: 'function name(...) { } — local-scoped user function',
-                doc:    'Defines a local-scoped user function. All `$variables` inside are mangled to `$var_fn.name` to avoid collisions. Call it as `$result = name($arg);`.',
-                insert: 'function \${1:DATATYPE_NULL} \${2:name}(\${3})\n{\n\t$0\n}',
-            },
-            {
-                label:  'sub',
-                detail: 'sub name() { } — sub block (shares global scope)',
-                doc:    'Defines a sub block. Variables are shared with the global script scope — no local isolation. Call with `gosub name;`.',
-                insert: 'sub \${1:name}()\n{\n\t$0\n}',
-            },
-            {
-                label:  'if',
-                detail: 'if (...) { }',
-                doc:    'Conditional block.',
-                insert: 'if (\${1:condition})\n{\n\t$0\n}',
-            },
-            {
-                label:  'if else',
-                detail: 'if (...) { } else { }',
-                doc:    'Conditional with else branch.',
-                insert: 'if (\${1:condition})\n{\n\t$2\n}\nelse\n{\n\t$0\n}',
-            },
-            {
-                label:  'while',
-                detail: 'while (...) { }',
-                doc:    'While loop.',
-                insert: 'while (\${1:condition})\n{\n\t$0\n}',
-            },
-        ];
-
-        return snippets.map(s => {
-            const item = new vscode.CompletionItem(s.label, vscode.CompletionItemKind.Snippet);
-            item.detail        = s.detail;
-            item.documentation = new vscode.MarkdownString(s.doc);
-            item.filterText    = s.label;
-            item.sortText      = '00' + s.label;  // float to top above functions
-            item.insertText    = new vscode.SnippetString(s.insert);
-            return item;
-        });
     }
 }
 
@@ -540,6 +546,44 @@ export class XScriptSignatureHelpProvider implements vscode.SignatureHelpProvide
         help.activeSignature = 0;
 
         for (const fn of candidates) {
+            // Check if this function has a scriptCheck argument — if so and the
+            // script name is already typed as a literal, show the script's own
+            // parameter list instead of the generic function signature.
+            const scriptCheckIdx = fn.args.findIndex((a: any) => a.scriptCheck);
+            if (scriptCheckIdx >= 0 && activeParam > scriptCheckIdx) {
+                const argsAfterParen = prefix.slice(parenPos + 1);
+                const scriptNameMatch = /["']([^"']+)["']/.exec(argsAfterParen);
+                if (scriptNameMatch) {
+                    const scriptDef = this.db.scripts.get(scriptNameMatch[1]);
+                    if (scriptDef) {
+                        // Build a signature from the script's own parameter list
+                        const scriptParams = scriptDef.args.map((a, i) =>
+                            a.name ? `${a.name}: ${a.desc || 'value'}` : `arg${i + 1}`
+                        );
+                        const retNote = scriptDef.returnTypes.length > 0 &&
+                            scriptDef.returnTypes[0] !== 0
+                            ? ` → type ${scriptDef.returnTypes[0]}` : '';
+                        const sigLabel = `${fn.name}("${scriptDef.name}", ${scriptParams.join(', ')})${retNote}`;
+                        const sig = new vscode.SignatureInformation(
+                            sigLabel,
+                            new vscode.MarkdownString(`Script: **${scriptDef.name}**`)
+                        );
+                        // First param = script name slot, then script's own params
+                        sig.parameters = [
+                            new vscode.ParameterInformation(`"${scriptDef.name}"`, 'Script to call'),
+                            ...scriptDef.args.map((a, i) =>
+                                new vscode.ParameterInformation(
+                                    a.name || `arg${i + 1}`,
+                                    a.desc || ''
+                                )
+                            ),
+                        ];
+                        help.signatures.push(sig);
+                        continue;
+                    }
+                }
+            }
+
             const sig = new vscode.SignatureInformation(fnLabel(fn), fnDocumentation(fn));
             sig.parameters = fn.args.map(a =>
                 new vscode.ParameterInformation(

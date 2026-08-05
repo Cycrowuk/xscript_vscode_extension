@@ -5,8 +5,8 @@
  *
  * Key struct sizes verified against MSVC x64 default packing:
  *   DataTypeFileData        = 12 bytes  (1 pad after isObject)
- *   FunctionFileData        = 28 bytes  (1 pad after allowNull, 3 pad at end)
- *   FunctionArgFileData     = 8  bytes
+ *   FunctionFileData        = 28 bytes  (1 pad after flags, 3 pad at end)
+ *   FunctionArgFileData     = 10 bytes  (u32 + 3×u16, flags added)
  *   CommandFileData         = 12 bytes  (2 pad at end)
  *   ObjectCommandFileData   = 12 bytes
  *   WareTypeFileData        = 12 bytes  (2 pad at end)
@@ -18,6 +18,7 @@ import * as fs   from 'fs';
 import * as path from 'path';
 import {
     XDatabase, XFunction, XProperty, XConstant,
+    XScriptDef, XScriptArgDef,
     retTs, pardefToTs, makeParamName,
 } from './xmlParser';
 
@@ -88,7 +89,7 @@ interface RawConstGroup { name: string; desc: string; }
 interface RawConstant  { code: string; id: number; subtypeId: number; groupName: string; }
 interface RawCommand   { id: string; num: number; name: string; shortName: string; description: string; }
 interface RawCommandList { datatypeId: number; name: string; desc: string; commands: Map<number, RawCommand>; }
-interface RawArgument  { pardefId: number; desc: string; constGroup: string; }
+interface RawArgument  { pardefId: number; desc: string; constGroup: string; scriptCheck: boolean; }
 interface RawFunction  {
     id: number; name: string; desc: string; example: string;
     allowNull: boolean; undefinedArgs: number;
@@ -240,7 +241,7 @@ function parseOneObjCmdList(r: BufReader): RawCommandList {
 
 // GFUNC / OFUNC — FunctionFileData = 28 bytes
 // id(u32=4) idSize(u16=2) descSize(u16=2) argCount(u16=2)
-// allowNull(u8=1) PAD(1) refObj(u16=2) orderCount(u16=2) exampleSize(u16=2)
+// flags(u8=1) PAD(1) refObj(u16=2) orderCount(u16=2) exampleSize(u16=2)
 // returnArg(u16=2) returnType(u16=2) returnCount(u16=2)
 // undefinedArgs(u8=1) PAD(3)
 function parseOneFunction(r: BufReader): RawFunction {
@@ -248,7 +249,9 @@ function parseOneFunction(r: BufReader): RawFunction {
     const idSize        = r.readU16();
     const descSize      = r.readU16();
     const argCount      = r.readU16();
-    const allowNull     = r.readU8() !== 0;
+    const flags         = r.readU8();
+    const allowNull     = (flags & 1) !== 0;
+    const allowNullObject = (flags & 2) !== 0;
     r.skip(1);          // ← alignment padding after uchar before ushort
     const refObjCount   = r.readU16();
     const orderCount    = r.readU16();
@@ -279,15 +282,16 @@ function parseOneFunction(r: BufReader): RawFunction {
     const returnValueTypeIds: number[] = [];
     for (let i = 0; i < returnCount; i++) { returnValueTypeIds.push(r.readU32()); }
 
-    // FunctionArgFileData = 8 bytes (u32 + 2×u16, no padding)
+    // FunctionArgFileData = 10 bytes (u32 + 3×u16, no padding)
     const fnArgs: RawArgument[] = [];
     for (let i = 0; i < argCount; i++) {
         const pardefId  = r.readU32();
         const aDescSize = r.readU16();
         const groupSize = r.readU16();
+        const flags     = r.readU16();  // bit 0 = scriptCheck
         const argDesc   = r.readStr(aDescSize);
         const constGroup = groupSize > 0 ? r.readStr(groupSize) : '';
-        fnArgs.push({ pardefId, desc: argDesc, constGroup });
+        fnArgs.push({ pardefId, desc: argDesc, constGroup, scriptCheck: (flags & 1) !== 0 });
     }
 
     return {
@@ -433,6 +437,7 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
     const rawNsFuncs:    { funcId: number; nsName: string; aliName: string }[] = [];
     const rawMacros:     { name: string; argNames: string[]; hasBlock: boolean }[] = [];
     const rawCustom:     RawCustomData[] = [];
+    const rawScripts     = new Map<string, XScriptDef>();
 
     // ── Main section loop — mirrors loadData() outer for(i) / inner for(j) ──
 
@@ -517,6 +522,26 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
                     rawMacros.push({ name, argNames, hasBlock });
                     break;
                 }
+                case 'SCRIPTS': {
+                    // Each iteration = one script definition
+                    const nameSize = r.readU16();
+                    const scriptName = r.readStr(nameSize);
+                    const rtCount = r.readU32();
+                    const returnTypes: number[] = [];
+                    for (let ri = 0; ri < rtCount; ri++) { returnTypes.push(r.readU32()); }
+                    const argCount2 = r.readU32();
+                    const scriptArgs: XScriptArgDef[] = [];
+                    for (let ai = 0; ai < argCount2; ai++) {
+                        const pd = r.readU32();
+                        const argNameSize = r.readU16();
+                        const argName = r.readStr(argNameSize);
+                        const argDescSize = r.readU16();
+                        const argDesc = r.readStr(argDescSize);
+                        scriptArgs.push({ pardefId: pd, name: argName, desc: argDesc });
+                    }
+                    rawScripts.set(scriptName, { name: scriptName, returnTypes, args: scriptArgs });
+                    break;
+                }
                 case 'SFUNC':       parseOneSFunc(r);      break;
                 case 'SPECIALKEY':  parseOneSpecialKey(r); break;
                 // OTFUNC: each j iteration = one datatype group
@@ -573,6 +598,7 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
             description: a.desc,
             tsType:      getPardefTs(a.pardefId),
             paramName:   makeParamName(String(a.pardefId), a.desc, i),
+            scriptCheck: a.scriptCheck,
         }));
 
         return {
@@ -691,5 +717,6 @@ export function parseBinaryDatabase(filePath: string): XDatabase {
         objectFunctions, raceFunctions, globalFunctions,
         namespaceFunctions, constantNamespaces, namespaces,
         macros: rawMacros,
+        scripts: rawScripts,
     };
 }

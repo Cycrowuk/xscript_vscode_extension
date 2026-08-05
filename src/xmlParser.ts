@@ -52,6 +52,18 @@ export interface XMacro {
     hasBlock: boolean;
 }
 
+export interface XScriptArgDef {
+    pardefId: number;
+    name:     string;  // variable name (from .xs) or empty
+    desc:     string;  // description (from .xml SetArgument)
+}
+
+export interface XScriptDef {
+    name:        string;
+    returnTypes: number[];  // DataTypes enum values; empty/[0] = unknown
+    args:        XScriptArgDef[];
+}
+
 export interface XDatabase {
     functions: Map<number, XFunction>;
     /** Lookup by name — multiple overloads possible */
@@ -78,6 +90,8 @@ export interface XDatabase {
     namespaces: string[];
     /** Function macros (e.g. foreach) defined in <Macros> */
     macros: XMacro[];
+    /** Script definitions extracted from .xs/.xml files during --builddata */
+    scripts: Map<string, XScriptDef>;
 }
 
 // ── Pardef → TypeScript type ──────────────────────────────────────────────────
@@ -378,5 +392,6 @@ export function parseXml(xmlPath: string): XDatabase {
         namespaceFunctions, constantNamespaces,
         namespaces: allNamespaces,
         macros,
+        scripts: new Map<string, XScriptDef>(),
     };
 }
