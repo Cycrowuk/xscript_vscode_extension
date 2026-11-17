@@ -4,6 +4,18 @@ Full IntelliSense, syntax highlighting, and diagnostics for XScript — the scri
 
 ---
 
+## What's New in v1.5.0
+
+Compiler v0.9 language features are now fully supported in the editor:
+
+- **`foreach` macro** — `foreach($value, $array) { ... }` has autocomplete, snippet, hover docs, and signature help
+- **`scriptCheck` arguments** — functions with a `scriptCheck` argument offer script-name completions at that position
+- **`allowNullObject` / `call()` bare invocation** — recognised in function argument metadata for signature help and hover
+- **`xscript.addDefine` command** — Command Palette shortcut to interactively add a compile-time `#define` symbol to your workspace settings without editing `settings.json`
+- **Binary `.dat` database** — `binaryParser.ts` added; the extension now loads the compact binary `.dat` format produced by `--builddata`, which is significantly faster than the XML fallback
+
+---
+
 ## What's New in v1.4.0
 
 Compiler v0.8 language features are now fully supported in the editor:
@@ -47,7 +59,7 @@ Compiler v0.8 language features are now fully supported in the editor:
 
 ### From VSIX (manual install)
 
-1. Download or build `xscript-x3fl-1.0.0.vsix`
+1. Download or build `xscript-x3fl-1.5.0.vsix`
 2. In VS Code: `Extensions` → `…` → `Install from VSIX…`
 3. Select the `.vsix` file
 
@@ -159,7 +171,7 @@ The extension can call the XScript compiler directly, showing errors as squiggle
 ### Compiler command format
 
 ```
-XScriptCompiler.exe --load_data x3fl.dat compile "input.xs" --out "output.xml"
+XScriptCompiler.exe --load_data x3fl.dat --compile "input.xs" --out "output.xml"
 ```
 
 ### Configure (VS Code settings)
@@ -248,7 +260,7 @@ npm run compile
 npx vsce package
 
 # Install into VS Code
-code --install-extension xscript-x3fl-1.0.0.vsix
+code --install-extension xscript-x3fl-1.5.0.vsix
 ```
 
 ---
@@ -260,6 +272,7 @@ xscript-x3fl/
 ├── src/
 │   ├── extension.ts      # Entry point — activation, provider registration
 │   ├── xmlParser.ts      # Parses x3fl.xml into the function database
+│   ├── binaryParser.ts   # Parses x3fl.dat / default_data.dat binary format
 │   ├── providers.ts      # Completion, SignatureHelp, Hover providers
 │   └── diagnostics.ts    # Argument count checking
 ├── syntaxes/

@@ -279,6 +279,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         })
     );
 
+    // Add compile-time define interactively
+    context.subscriptions.push(
+        vscode.commands.registerCommand('xscript.addDefine', async () => {
+            const name = await vscode.window.showInputBox({
+                prompt:      'Enter a symbol name to define (e.g. DEBUG)',
+                placeHolder: 'SYMBOL_NAME',
+                validateInput: (v: string) => {
+                    if (!v.trim()) { return 'Symbol name cannot be empty.'; }
+                    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.trim())) {
+                        return 'Must be a valid identifier (letters, digits, underscores; not starting with a digit).';
+                    }
+                    return undefined;
+                },
+            });
+            if (!name) { return; }
+
+            const cfg      = vscode.workspace.getConfiguration('xscript.compiler');
+            const existing: string[] = cfg.get('defines') ?? [];
+            const trimmed  = name.trim();
+            if (existing.includes(trimmed)) {
+                vscode.window.showInformationMessage(`XScript: "${trimmed}" is already defined.`);
+                return;
+            }
+            await cfg.update('defines', [...existing, trimmed], vscode.ConfigurationTarget.Workspace);
+            vscode.window.showInformationMessage(`XScript: Added define "${trimmed}".`);
+        })
+    );
+
     // Reload definition database
     context.subscriptions.push(
         vscode.commands.registerCommand('xscript.reloadDatabase', async () => {

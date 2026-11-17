@@ -1,6 +1,6 @@
 {
   "name": "xscript-x3fl",
-  "displayName": "XScript \u2014 X3 Farnham's Legacy",
+  "displayName": "XScript — X3 Farnham's Legacy",
   "description": "IntelliSense, syntax highlighting, and compiler integration for X3 Farnham's Legacy XScript",
   "version": "1.5.0",
   "publisher": "x3fl",
@@ -216,5 +216,9 @@
     "@types/vscode": "^1.75.0",
     "typescript": "^5.0.0",
     "@vscode/vsce": "^2.0.0"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign@2.0.9": true,
+    "keytar@7.9.0": true
   }
 }
